@@ -1,24 +1,32 @@
 const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const app = express();
 
-// Define a proxy route to fetch website HTML
 app.use('/getWebsiteHTML', createProxyMiddleware({ 
-  target: 'https://cdn43.t4ce4ma.shop/',
-  changeOrigin: true,
-  pathRewrite: {
-    '^/getWebsiteHTML': '/',
-  },
-  onProxyRes: (proxyRes, req, res) => {
-    console.log('Request:');
-    let htmlData = '';
-    proxyRes.on('data', (chunk) => {
-      htmlData += chunk;
-    });
-    proxyRes.on('end', () => {
-      console.log('HTML Content:', htmlData);
-    });
-  }
+    target: 'https://cdn43.t4ce4ma.shop/',
+    changeOrigin: true,
+    pathRewrite: {
+      '^/getWebsiteHTML': '/',
+    },
+    selfHandleResponse: true, // Ensure self handle response is set to true
+    on: {
+      proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+        if (!responseBuffer) {
+          console.error('Response buffer is undefined');
+          res.status(500).send('Internal Server Error');
+          return;
+        }
+        
+        let htmlData = responseBuffer.toString('utf8');
+        console.log('HTML Content:', htmlData);
+        res.setHeader('Content-Type', 'text/html'); // Set Content-Type header
+        res.send(htmlData); // Send the response to the client
+      }),
+      error: (err, req, res) => {
+        console.error(err);
+        res.status(500).send('Proxy Error'); // Send an error response to the client
+      },
+    },
 }));
 
 // Start the server
